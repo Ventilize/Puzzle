@@ -1,0 +1,963 @@
+#include <Windows.h>
+#include <winuser.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include "graphics.h"
+#include "extgraph.h"
+#include "imgui.h"
+
+#include "UI.h"
+#include"File.h"
+
+
+#define MAX_LINE 100
+#define MAX_ROWS 50
+
+char text[MAX_ROWS][MAX_LINE + 1];
+char notename[50][100];
+char noteclass[50];
+int allnotes = 0;
+typedef struct  myNote {
+	char mytitle[40];  //笔记名字
+	char myclass;  //笔记类别
+	struct myNote* next;
+}Note;
+Note* head = NULL, * tail = NULL;
+int line_length_count;/*一行直到'\0'的长度*/
+
+/*数据分析函数*/
+void dataanalyze(int mod) {
+	int i;
+	int num[6] = { 0 };
+	for (i = 0; i < allnotes; i++) {
+		switch (noteclass[i]) {
+		case 'A':
+			num[0]++;
+			break;
+		case 'B':
+			num[1]++;
+			break;
+		case 'C':
+			num[2]++;
+			break;
+		case 'D':
+			num[3]++;
+			break;
+		case 'E':
+			num[4]++;
+			break;
+		case 'F':
+			num[5]++;
+			break;
+		}
+	}
+	/*记得最多的*/
+	if (mod == 1) {
+		int max, mn = 0;/*mn是对应序号*/
+		max = num[0];
+		for (i = 0; i < 5; i++) {
+			if (num[i] < num[i + 1]) {
+				max = num[i + 1];
+				mn = i + 1;
+			}
+		}
+		char favor[20];
+		switch (mn) {
+		case 0:
+			strcpy(favor, "默认");
+			break;
+		case 1:
+			strcpy(favor, "线性代数");
+			break;
+		case 2:
+			strcpy(favor, "C语言");
+			break;
+		case 3:
+			strcpy(favor, "离散数学");
+			break;
+		case 4:
+			strcpy(favor, "英语");
+			break;
+		case 5:
+			strcpy(favor, "通识");
+			break;
+		}
+		InitConsole();
+		printf("你最爱作的笔记是——%s\n一共记录了%d本", favor, max);
+	}
+	else if (mod == 2) {
+		FreeConsole();
+		InitConsole();
+		printf("你一共做了%d本笔记", allnotes);
+	}
+}
+/*每次关闭程序时保存数据*/
+void UpDataDelete() {
+	Note* p = head;
+	int i;
+	memset(notename, 0, sizeof(notename));
+	memset(noteclass, 0, sizeof(noteclass));
+	for (i = 0; p != NULL; p = p->next) {
+		strcpy(notename[i], p->mytitle);
+		noteclass[i] = p->myclass;
+		i++;
+	}
+	if (i < allnotes)allnotes = i;
+	return;
+}
+void LinkList() {
+	int i;
+	for (i = 0; i < allnotes; i++) {
+		Note* p = (Note*)malloc(sizeof(Note*));
+		strcpy(p->mytitle, notename[i]);
+		p->myclass = noteclass[i];
+		if (head == NULL)tail = head = p;
+		else {
+			tail->next = p;
+			tail = p;
+		}
+	}
+	tail->next = NULL;
+}
+
+void Delete(char* name) {
+	if (head == NULL)return;
+	Note* p = head;
+	if (strcmp(head->mytitle, name) == 0) {
+		head = head->next;
+		InitConsole();
+		printf("删除成功");
+		return;
+	}
+	while (p->next != NULL) {
+		if (strcmp(p->next->mytitle, name) == 0) {
+			p->next = p->next->next;
+			InitConsole();
+			printf("删除成功");
+			return;
+		}
+		if (p->next == NULL) {
+			break;
+		}
+		p = p->next;
+	}
+	return;
+}
+
+void SaveUserData() {
+	FILE* fp;
+	fp = fopen("C:\\Users\\15473\\Desktop\\大作业.txt", "w+");
+	//fp = fopen("D:\\大作业\\LibGraphicsGUI2023\\tutorialsVS2010 - 副本\\UserData.txt", "w+");
+	int n = 0;
+	while (n < allnotes) {
+		if (fputs(notename[n], fp) == EOF)break;
+		fputc(' ', fp);
+		fputc(noteclass[n], fp);
+		fputc('\n', fp);
+		n++;
+	}
+	fclose(fp);
+}
+/*每次打开程序时读入历史用户数据*/
+void ReadUserData() {
+	FILE* fp;
+	fp = fopen("C:\\Users\\15473\\Desktop\\大作业.txt", "r+");
+	//fp = fopen("D:\\大作业\\LibGraphicsGUI2023\\tutorialsVS2010 - 副本\\UserData.txt", "r+");
+	if (fp == NULL)exit(-1);
+	char line[1024];
+	int i = 0;
+	while (fgets(line, sizeof(line), fp) != NULL) {
+		// Remove newline character from the end of the line
+		line[strcspn(line, "\n")] = '\0';
+
+		// Extract filename and character from the line
+		sscanf(line, "%s %c", notename[i], &noteclass[i]);
+		i++;
+		allnotes++;
+	}
+	fclose(fp);
+}
+
+int GetLine_length(char* a) {
+	int count;
+	for (count = 0; a[count] != '\0'; count++);
+	return count;
+}
+
+/*全局变量*/
+typedef struct line {
+	char linetext[100];
+	struct line* next;
+}line;
+
+
+double winheight, winwidth; //最大窗口尺寸
+double mouse_x = 0, mouse_y = 0; //鼠标位置
+int flag = 0;//针对diaplay0
+double text_x, text_y, text_height;
+int current_line = 0;
+int current_line_length = 0;
+int line_count = 0;
+int ifpress = 0;  //用于是否显示说明
+int reserveOneChar = 1;
+/*newly add by wyz*/
+int Now_x;
+int Now_y;
+int ifopen = 0;
+int ifsave = 0;
+
+/*有关分类的变量*/
+char lei;//取值为A~F
+int allclasses = 6; //所有类别的数量
+int classflag = 0; //用于进入具体类别 1->A  2->B  ...   6->F
+char yclass;  //
+
+/*会放在头文件中*/
+
+void DrawMenu(); //在display1()(新建笔记) 里面用到,可参考上一届和7-simplegui.c 108行开始
+void DrawHeadArea(); //@已完成
+void DrawNotebooks();//@
+void DisplayClear(void);
+void myKeyboardEvent(int key, int event);
+void myCharEvent(char ch);
+void myMouseEvent(int x, int y, int button, int event);
+
+// 用户的显示函数
+void display0();         // 用于主界面的display0
+void write_display();         // 用于新建文件
+void display2();         // 用于查看文件
+
+/*保存和打开*/
+int FileDialogOpen(char* path);
+int FileDialogSave(char* path);
+void newfile();
+void openfile();
+void savefile();
+
+/*分类的函数*/
+void drawClass();
+void displayclassAll();
+
+
+
+//void DrawMenu(); 画菜单, 在display1()(新建笔记) 里面用到,可参考上一届和7-simplegui.c 108行开始
+void DrawMenu() {
+	SetFont("宋体");
+	SetPointSize(15);
+	SetStyle(1);//并不理解
+	//以下需要列出多个处理文本的功能
+	static char* menuListFile[] = { "文件", "保存", "分类", "打开" };
+	static char* menuListBack[] = { "返回", "上一级", "退出" };
+	static char* menuListAnalyze[] = { "数据分析", "最努力项", "总数统计" };
+	setMenuColors("White", "Blue", "White", "black", 1);
+	//这一句的效果: 白底黑字,当鼠标移上去的时候,字变成蓝色
+
+	int selection = 0;
+	double fH = GetFontHeight(); //这是当前字体的高度
+	//左上角排列菜单
+	double x = 0;//说明菜单从最左边开始
+	double y = winheight;//说明菜单从最上面开始
+	double h = fH * 1.8;//菜单的高度
+	double w = TextStringWidth(menuListFile[0]) * 3; //是"文件"宽度的3倍
+	drawMenuBar(x, y - h, 6 * w, h);//
+	//左下角的类别
+	//drawBox(x,0,0.5,0.5,0,"类别","L","Bl_1");
+
+	/*以下归属于"文件"*/
+	selection = menuList(GenUIID(0), x, y - h, w, w, h, menuListFile, sizeof(menuListFile) / sizeof(menuListFile[0]));
+	if (selection == 1)
+	{
+		/*保存文件*/
+		ifsave = 1;
+		savefile();
+		ifsave = 0;
+		SaveUserData();
+	}
+	if (selection == 2)
+	{
+		/*笔记分类*/
+		char title[40];
+		int find = 0;//找到的笔记序号
+		InitConsole();
+		system("mode con cols=30 lines=10  "); //设置大小
+		printf("要分类笔记的名称为:\n");
+		scanf("%s", title);
+		find = search(title);
+		getchar();
+		printf("该笔记的类别为:\n请输入A~F之间的大写字母\n");
+		noteclass[find] = getchar();
+		//ShowWindow(GetConsoleWindow(), SW_HIDE);
+		if (!(noteclass[find] >= 'A' && noteclass[find] <= 'F')) {
+			printf("您输入的类别不正确!\n");
+			exit(-1);
+		}
+		SaveUserData();
+	}
+	if (selection == 3)
+	{
+		ifopen = 1;
+		openfile();
+		ifopen = 0;
+	}
+
+	/*以下归属"返回"*/
+	selection = menuList(GenUIID(0), x + w, y - h, w, w, h, menuListBack, sizeof(menuListBack) / sizeof(menuListBack[0]));
+	if (selection == 1)
+	{
+		/*返回上一级*/
+		memset(text, 0, sizeof(text));
+		flag = 0;
+		display0();
+	}
+	if (selection == 2) {
+		/*直接退出,作用和 × 一样*/
+		exit(-1);
+	}
+
+	/*以下为数据分析功能*/
+	selection = menuList(GenUIID(0), x + 2 * w, y - h, w, w, h, menuListAnalyze, sizeof(menuListAnalyze) / sizeof(menuListAnalyze[0]));
+	if (selection == 1)
+	{
+		dataanalyze(1);
+	}
+	if (selection == 2) {
+		dataanalyze(2);
+	}
+}
+
+int search(char* name) {
+	int find;
+	for (find = 0; find < allnotes; find++) {
+		if (strcmp(notename[find], name) == 0)return find;
+	}
+	InitConsole();
+	printf("不存在该笔记");
+	exit(-1);
+}
+
+int isPrintable(int ch)//是否能进行输入
+{
+	return ch >= VK_SPACE && ch < 127 || ch < 0;
+}
+
+int InsertNewLine()
+{
+	int y;
+	if (line_count == MAX_ROWS)
+		return 0;
+	for (y = line_count; y > current_line + 1; y--)
+		strcpy(text[y], text[y - 1]);
+	line_count++;
+	current_line++;
+	text[current_line][0] = '\0';
+	current_line_length = 0;
+	return 1;
+}
+
+int RemoveLine(int k)
+{
+	int y;
+	if (line_count < 1)
+		return 0;
+	for (y = k; y < line_count - 1; y++)
+		strcpy(text[y], text[y + 1]);
+	line_count--;
+	return 1;
+}
+
+void Main()
+{
+	//registerTimerEvent(TimerEventProcess);      // 定时器
+	//
+	//创建默认笔记
+	ReadUserData();
+	SetWindowTitle("nia做笔记");
+	SetWindowSize(10, 10);
+	winheight = 10.0;
+	winwidth = 10.0;
+	InitGraphics();
+	text_height = GetFontHeight() * 1.5;
+	text_x = 0.2;
+	text_y = GetWindowHeight() / 8 * 7;
+	registerCharEvent(myCharEvent);
+	registerKeyboardEvent(myKeyboardEvent);
+	registerMouseEvent(myMouseEvent);
+
+	DrawHeadArea();
+	DrawNotebooks();
+}
+
+void write_display() {  //这是新建笔记界面
+	//InitConsole();
+	SetPenColor("Black");
+	int y;
+	DisplayClear();
+	double py = text_y;
+	double d = GetFontHeight();
+	//printf("%lf", py);
+	for (y = 0; y < line_count || y == 0; y++) {
+		py = text_y - text_height * y;
+		MovePen(0, py);
+		DrawTextString(text[y]);
+	}
+	MovePen(0, py -= text_height);
+	DrawTextString(text[y]);
+	//if (y == 1)py += text_height;
+	MovePen(TextStringWidth(text[y]), py - 0.04);
+	/*current_line_length*//* * (d - 0.098)*/
+	SetPenColor("Blue");
+	DrawLine(0, 0.2);
+	DrawMenu(); //画菜单
+}
+
+
+
+void display2()        // 用于查看文件
+{
+	/*菜单*/
+	{
+		SetFont("宋体");
+		SetPointSize(15);
+		SetStyle(1);//并不理解
+		//以下需要列出多个处理文本的功能
+		//static char* menuListFile[] = { "文件", "保存", "分类" };
+		static char* menuListBack[] = { "返回", "上一级", "退出" };
+		static char* menuListFunc[] = { "功能", "查找", "删除" };//newzzm
+		setMenuColors("White", "Blue", "White", "black", 1);
+		//这一句的效果: 白底黑字,当鼠标移上去的时候,字变成蓝色
+
+		int selection = 0;
+		double fH = GetFontHeight(); //这是当前字体的高度
+		//左上角排列菜单
+		double x = 0;//说明菜单从最左边开始
+		double y = winheight;//说明菜单从最上面开始
+		double h = fH * 1.8;//菜单的高度
+		double w = TextStringWidth(menuListBack[0]) * 3; //是"返回"宽度的3倍
+		drawMenuBar(x, y - h, 6 * w, h);//
+
+		/*以下归属于"返回"*/
+		selection = menuList(GenUIID(0), x, y - h, w, w, h, menuListBack, sizeof(menuListBack) / sizeof(menuListBack[0]));
+		if (selection == 1)
+		{
+			/*返回上一级*/
+			memset(text, 0, sizeof(text));
+			flag = 0;
+			display0();
+		}
+		if (selection == 2)
+		{
+			exit(-1);
+		}
+		/*查找和删除功能*/
+		selection = menuList(GenUIID(0), x + w, y - h, w, w, h, menuListFunc, sizeof(menuListFunc) / sizeof(menuListFunc[0]));
+		if (selection == 1)
+		{
+			int find;
+			char name[100];
+			/*查找*/
+			InitConsole();
+			printf("请输入需要查找的笔记\n");
+			scanf("%s", name);
+			find = search(name);
+			FILE* fp = fopen(notename, "r+");
+			memset(text, 0, sizeof(text));
+			line_count = 0;
+			while (fgets(text[line_count], 100, fp) != NULL)line_count++;
+			flag = 1;
+			write_display();
+			fclose(fp);
+		}
+		if (selection == 2)
+		{
+			int find;
+			char name[100];
+			/*查找*/
+			InitConsole();
+			printf("请输入需要删除的笔记\n");
+			scanf("%s", name);
+			find = search(name);
+			LinkList();
+			Delete(notename[find]);
+			UpDataDelete();
+			SaveUserData();
+		}
+	}
+
+	/*6类*/
+	drawClass();//显示当前所有类别,包括默认分类和自定义分类
+}
+
+
+
+void display0()
+{
+	DisplayClear();
+
+	if (flag == 0)
+	{
+		DrawNotebooks();
+		DrawHeadArea();
+	}
+	if (flag == 1) //新建笔记
+	{
+		write_display();
+	}
+	if (flag == 2 && classflag == 0) //查看笔记
+	{
+		display2(); //直接列出6类
+	}
+	if (flag == 3)
+	{
+		int size = GetPointSize();
+		if (ifpress)
+		{
+			DefineColor("mycolor", 0.62, 0.85, 0.78);
+			SetPenColor("mycolor");
+			drawRectangle(0.25 * winwidth, 0.01 * winheight, 0.5 * winwidth, 0.15 * winheight, 1);
+			SetPenColor("Black");
+			SetPointSize(20);
+			drawLabel(0.3 * winwidth, 0.18 * winheight, "1.新建笔记后可直接输入文本;");
+			drawLabel(0.3 * winwidth, 0.15 * winheight, "2.请不要在保存的进程中退出;");
+			drawLabel(0.3 * winwidth, 0.12 * winheight, "3.保存文件时,请在文件命名添加后缀.txt;");
+			drawLabel(0.3 * winwidth, 0.09 * winheight, "4.请不要关闭笔记分类时打开的控制台;");
+			drawLabel(0.3 * winwidth, 0.06 * winheight, "5.笔记窗口可能会把控制台挡住哦;");
+			drawLabel(0.3 * winwidth, 0.03 * winheight, "6.该系统暂时支持6类,每类最多15个笔记;");
+
+			//drawBox(0.1 * winwidth, 0.1 * winheight, 0.8 * winwidth, 0.2 * winheight, 1, " ", "L", "Blue");
+		}
+		SetPointSize(size);
+		DrawNotebooks();
+		DrawHeadArea();
+	}
+}
+
+/*输出“欢迎使用nia笔记本”*/
+void DrawHeadArea()
+{
+	DefineColor("mycolor", 0.90196, 0.90196, 0.90196);
+	SetPenColor("mycolor");
+	drawRectangle(0, winheight - 0.3125 * 4, winwidth, 3 * 0.3125, 1);
+	SetPenColor("Black");
+	SetFont("楷体");
+	SetPointSize(40);
+	drawLabel(0.33 * winwidth, winheight - 2 * 0.3125 - 0.3, "欢迎使用nia笔记本");
+}
+
+/*主界面两个笔记按钮*/
+void DrawNotebooks()
+{
+	double w = 2.0;
+	double h = 2.6;
+	if (button(GenUIID(0), 0.20 * winwidth, 0.33 * winheight, w, h, "新建笔记")) {
+		flag = 1;
+		DisplayClear();
+	}
+	if (button(GenUIID(0), 0.60 * winwidth, 0.33 * winheight, w, h, "查看笔记")) {
+		flag = 2;
+		DisplayClear();
+	}
+	if (button(GenUIID(0), 0.33 * winwidth, 0.2 * winheight, 0.33 * winwidth, 0.08 * winheight, ifpress ? "关闭说明" : "使用说明"))
+	{
+		ifpress = !ifpress;
+		flag = 3;
+		if (ifpress) {
+			//setButtonColors("Gr_1", "Black", "Gr_2", "Blue", 1);
+			//drawBox(0.2 * winwidth, 0.1 * winheight, 0.6 * winwidth, 0.2 * winheight, 0, "", "C", "Blue");
+		}
+	}
+	//具体实现进入display0
+}
+
+void myMouseEvent(int x, int y, int button, int event)
+{
+	mouse_x = ScaleXInches(x);
+	mouse_y = ScaleYInches(y);
+	uiGetMouse(x, y, button, event);
+	display0();
+	if (classflag != 0) {
+		displayclassAll();
+	}
+	else if (flag == 1) {
+		write_display();
+	}
+}
+
+// 用户的字符事件响应函数
+void myCharEvent(char ch)
+{
+	int maxnum = MAX_LINE;
+	uiGetChar(ch);
+
+	switch (ch) {
+	case VK_ESCAPE:
+		exit(-1);
+	default:
+		/*在行的中间写入*/
+		if (isPrintable(ch) && current_line_length < maxnum && text[current_line][current_line_length] != '\0') {
+			int linelength = 0;
+			int offset = 1;
+			if (ch < 0) {
+				offset = 2;
+				maxnum -= reserveOneChar;
+				reserveOneChar = 1 - reserveOneChar;
+			}
+			for (linelength = GetLine_length(text[current_line]) - 1; linelength >= current_line_length; linelength--) {
+				if (reserveOneChar == 0 || !(ch < 0))text[current_line][linelength + offset] = text[current_line][linelength];
+			}
+			text[current_line][current_line_length] = ch;
+			current_line_length++;
+			//将字符加入到行尾
+			//if (ch < 0) {
+				// 当 ch<0, reserveOneChar=1, 表示汉字的第1个char
+				// 当 ch<0, reserveOneChar=0, 表示汉字的第2个char
+			//	maxnum -= reserveOneChar;
+			//	reserveOneChar = 1 - reserveOneChar;
+			//}
+			if (reserveOneChar == 1)write_display();
+		}
+
+		/*在行的末尾写入*/
+		else if (isPrintable(ch) && current_line_length < maxnum && text[current_line][current_line_length] == '\0') {
+			if (ch < 0)  maxnum -= reserveOneChar;
+			text[current_line][current_line_length++] = ch;
+			//InitConsole();
+			//printf("%d\n", current_line_length);
+			//将字符加入到行尾
+			text[current_line][current_line_length] = '\0';
+			if (ch < 0)
+				// 当 ch<0, reserveOneChar=1, 表示汉字的第1个char
+				// 当 ch<0, reserveOneChar=0, 表示汉字的第2个char
+				reserveOneChar = 1 - reserveOneChar;
+			write_display();
+		}
+		break;
+	}
+}
+// 用户的键盘事件响应函数
+void myKeyboardEvent(int key, int event)
+{
+	char ch;
+	if (event == KEY_UP) {
+		//printf("key=%dc\n", key);
+
+		switch (key) {
+		case VK_LEFT:
+			if (current_line_length == 0)break;
+			ch = text[current_line][current_line_length - 1];
+			if (ch > 0)current_line_length--;
+			else if (ch < 0)current_line_length -= 2;
+			break;
+		case VK_UP:
+			if (current_line > 0) {
+				current_line--;
+				current_line_length = strlen(text[current_line]);
+				write_display();
+			}
+			break;
+
+		case VK_RIGHT:
+			if (text[current_line][current_line_length] == '\0') {
+				text[current_line][current_line_length + 1] = '\0';
+				text[current_line][current_line_length] = ' ';
+			}
+			current_line_length++;
+			break;
+		case VK_NEXT:
+		case VK_DOWN:
+			if (current_line < line_count) {
+				current_line++;
+				current_line_length = strlen(text[current_line]);
+				write_display();
+			}
+			break;
+		case VK_RETURN:
+			if (InsertNewLine())
+				write_display();
+			break;
+		case VK_BACK:
+			if (current_line_length > 0) {
+				int i = 1;
+				if (text[current_line][current_line_length - 1] < 0)i = 2;
+				while (i--)text[current_line][--current_line_length] = '\0';
+				write_display();
+			}
+			else if (RemoveLine(current_line)) {
+				if (current_line > 0)
+					current_line--;
+				current_line_length = strlen(text[current_line]);
+				write_display();
+			}
+			break;
+		}
+	}
+}
+
+// 返回值: 成功 1, 失败 0
+// 通过 path 返回获取的路径
+/*
+int FileDialogOpen(char* path)
+{
+	OPENFILENAME ofn; //  公共对话框结构
+	ZeroMemory(&ofn, sizeof(ofn));
+	ofn.lStructSize = sizeof(ofn); // 结构大小
+	ofn.lpstrFile = path; // 路径
+	ofn.nMaxFile = MAX_PATH; // 路径大小
+	ofn.lpstrFilter = "txt\0"; // 文件类型
+	ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
+	return GetOpenFileName(&ofn);
+}
+*/
+
+
+int FileDialogSave(char* path)
+{
+	OPENFILENAME ofn; //  公共对话框结构
+	TCHAR szFile[MAX_PATH]; //  保存获取文件名称的缓冲区
+	ZeroMemory(&ofn, sizeof(ofn));
+	ofn.lStructSize = sizeof(ofn); // 结构大小
+	ofn.lpstrFile = path; // 路径
+	ofn.nMaxFile = MAX_PATH; // 路径大小
+	ofn.lpstrFilter = "txt\0"; // 文件类型
+	ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
+	//if (GetSaveFileName(&ofn))
+	//{
+		//OutputDebugString(szFile); // 显示选择的文件。
+	//}
+	return GetSaveFileName(&ofn);
+}
+
+/* 打开文件 */
+void openfile()
+{
+	/*文件名字 */
+	char filename[512] = { 0 };
+	if (ifopen == 1)
+	{
+		if (FileDialogOpen(filename) == 0)
+		{
+			return;
+		}
+		else
+		{
+			/* 打开文件*/
+			FILE* fp = fopen(filename, "r+");
+
+			/* 设置字符串*/
+			memset(text, 0, sizeof(text));
+			line_count = 0;
+			current_line = 0;
+			while (fgets(text[line_count], 100, fp) != NULL) {
+				line_count++;
+				current_line++;
+			}
+			current_line_length = GetLine_length(text[current_line]);
+			write_display();
+			fclose(fp);
+		}
+	}
+}
+
+/* 保存文件 */
+void savefile()
+{
+	int n = 0;
+	char* name;
+	char filename[512] = { 0 };
+	if (ifsave == 1)
+	{
+		if (FileDialogSave(filename) == 0)
+		{
+		}
+	}
+	name = strrchr(filename, 92) + 1;
+	strcpy(notename[allnotes], name);
+	noteclass[allnotes] = 'A';
+	FILE* fp = fopen(notename[allnotes], "w");
+	while (n <= line_count && fputs(text[n], fp) != EOF) {
+		fputc('\n', fp);
+		n++;
+	}
+	fclose(fp);
+	allnotes++;
+	InitConsole();
+	int i = 0;
+	for (i = 0; i < allnotes; i++) {
+		printf("%s%c\n", notename[i], noteclass[i]);
+	}
+	write_display();
+}
+/*画6类*/
+void drawClass()
+{
+	int thesize = GetPenSize();
+	double chang = 1.5;
+	double gao = 1.8;
+	double xishushang = 0.55;
+	double xishuxia = 0.20;
+
+	SetPenSize(5);
+	SetPointSize(30);
+	/*强制6类*/
+	setButtonColors("Blue", "Black", "Black", "Black", 0);
+	if (button(GenUIID(0), 0.10 * winwidth, xishushang * winheight, chang, gao, "A"))
+	{
+		SetPenSize(thesize);
+		DisplayClear();
+		classflag = 1;
+	}
+	setButtonColors("Green", "Black", "Black", "Black", 0);
+	if (button(GenUIID(1), 0.40 * winwidth, xishushang * winheight, chang, gao, "B"))
+	{
+		SetPenSize(thesize);
+		DisplayClear();
+		classflag = 2;
+	}
+	setButtonColors("Magenta", "Black", "Black", "Black", 0);
+	if (button(GenUIID(2), 0.70 * winwidth, xishushang * winheight, chang, gao, "C"))
+	{
+		SetPenSize(thesize);
+		classflag = 3;
+		DisplayClear();
+	}
+	setButtonColors("Cyan", "Black", "Black", "Black", 0);
+	if (button(GenUIID(0), 0.10 * winwidth, xishuxia * winheight, chang, gao, "D"))
+	{
+		SetPenSize(thesize);
+		classflag = 4;
+		DisplayClear();
+	}
+	setButtonColors("Gray", "Black", "Black", "Black", 0);
+	if (button(GenUIID(1), 0.40 * winwidth, xishuxia * winheight, chang, gao, "E"))
+	{
+		SetPenSize(thesize);
+		classflag = 5;
+		DisplayClear();
+	}
+	setButtonColors("Yellow", "Black", "Black", "Black", 0);
+	if (button(GenUIID(2), 0.70 * winwidth, xishuxia * winheight, chang, gao, "F"))
+	{
+		SetPenSize(thesize);
+		classflag = 6;
+		DisplayClear();
+	}
+
+	SetPenSize(1);
+	SetPointSize(20);
+	setTextBoxColors("Blue", "Black", "Black", "Black", 0);
+	textbox(GenUIID(0), 0.1 * winwidth, xishushang * winheight - 0.5, chang, gao * 0.25, "默认分类", 20);
+
+	setButtonColors("Blue", "Black", "Red", "Red", 0);
+}
+
+
+
+/*6类通用*/
+void displayclassAll()
+{
+	FILE* fp = NULL;
+	DisplayClear();
+	/*菜单*/
+	{
+		SetFont("宋体");
+		SetPointSize(15);
+		SetStyle(1);
+		static char* menuListBack[] = { "返回", "上一级", "退出" };
+		static char* menuListTemp[] = { "one", "two", "three", "four" };  //debug  可以走到这一步
+		setMenuColors("White", "Blue", "White", "Black", 1);
+
+		int selection = 0;
+		double fH = GetFontHeight();
+		double x = 0;
+		double y = winheight;
+		double h = fH * 1.8; //菜单的高度
+		double w = TextStringWidth(menuListBack[0]) * 3; //是"返回"宽度的3倍
+		drawMenuBar(x, y - h, 6 * w, h);
+
+		//以下归属于"返回"
+		selection = menuList(GenUIID(0), x, y - h, w, w, h, menuListBack, sizeof(menuListBack) / sizeof(menuListBack[0]));
+		if (selection == 1)
+		{
+			//上一级
+			//memset(text, 0, sizeof(text));
+			//flag = 0;
+			classflag = 0;
+			display2();
+		}
+		if (selection == 2)
+		{
+			exit(-1);
+		}
+
+		//debug 最终需要删除!!!
+		selection = menuList(GenUIID(0), x + w, y - h, w, w, h, menuListTemp, sizeof(menuListTemp) / sizeof(menuListTemp[0]));
+		if (selection == 2) {
+			display2();
+		}
+	}
+
+	if (classflag == 1) {
+		lei = 'A';
+	}
+	else if (classflag == 2) {
+		lei = 'B';
+	}
+	else if (classflag == 3) {
+		lei = 'C';
+	}
+	else if (classflag == 4) {
+		lei = 'D';
+	}
+	else if (classflag == 5) {
+		lei = 'E';
+	}
+	else if (classflag == 6) {
+		lei = 'F';
+	}
+
+	int k;/*遍历变量*/
+	int pos;/*位置编号*/
+	for (k = 0, pos = 0; k < allnotes; k++, pos++)
+	{
+		SetPointSize(25);
+		if (noteclass[k] == lei)
+		{
+			if (pos < 3) {
+				if (button(GenUIID(pos), 0.1 * winwidth + pos * 0.2 * winwidth, 0.55 * winheight, 1.5, 1.8, notename[k]))
+				{
+					fp = fopen(notename[k], "r + ");
+					memset(text, 0, sizeof(text));
+					line_count = 0;
+					while (fgets(text[line_count], 100, fp) != NULL)line_count++;
+					flag = 1;
+					classflag = 0;//newzzm
+					write_display();
+				}
+			}
+			else if (pos >= 3 && pos < 6) {
+				if (button(GenUIID(pos), 0.1 * winwidth + (pos - 3) * 0.2 * winwidth, 0.35 * winheight, 1.5, 1.8, notename[k]))
+				{
+					fp = fopen(notename[k], "r + ");
+					memset(text, 0, sizeof(text));
+					line_count = 0;
+					while (fgets(text[line_count], 100, fp) != NULL)line_count++;
+					flag = 1;
+					classflag = 0;//newzzm
+					write_display();
+				}
+			}
+			else if (k >= 6 && k < 9) {
+				if (button(GenUIID(pos), 0.1 * winwidth + (pos - 6) * 0.3 * winwidth, 0.15 * winheight, 1.5, 1.8, notename[k]))
+				{
+					fp = fopen(notename[k], "r + ");
+					memset(text, 0, sizeof(text));
+					line_count = 0;
+					while (fgets(text[line_count], 100, fp) != NULL)line_count++;
+					flag = 1;
+					classflag = 0;//newzzm
+					write_display();
+				}
+			}
+		}
+	}
+}
