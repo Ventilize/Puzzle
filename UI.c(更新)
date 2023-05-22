@@ -1,0 +1,120 @@
+#include <Windows.h>
+#include <winuser.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include "graphics.h"
+#include "extgraph.h"
+#include "imgui.h"
+
+#include"Class.h"
+#include"File.h"
+#include"UI.h"
+#include"Write.h"
+#include"Event.h"
+
+
+double winheight, winwidth; //最大窗口尺寸
+int ifpress = 0; //用于是否显示说明
+int show = 1; //只显示一次第一个控制台
+extern flag, classflag;
+
+
+/*整个程序的第一层UI*/
+void DisplayStart();
+/*输出“欢迎使用nia笔记本”*/
+void DrawHeadArea();
+/*画出笔记本和说明*/
+void DrawNotebooks();
+
+
+/*输出“欢迎使用nia笔记本”*/
+void DrawHeadArea()
+{
+	DefineColor("mycolor", 0.90196, 0.90196, 0.90196);
+	SetPenColor("mycolor");
+	drawRectangle(0, winheight - 0.3125 * 4, winwidth, 3 * 0.3125, 1);
+	SetPenColor("Black");
+	SetFont("楷体");
+	SetPointSize(40);
+	drawLabel(0.33 * winwidth, winheight - 2 * 0.3125 - 0.3, "欢迎使用nia笔记本");
+}
+
+void DisplayStart()
+{
+	DisplayClear();
+
+	if (flag == 0)
+	{
+		DrawNotebooks();
+		DrawHeadArea();
+	}
+	if (flag == 1) //新建笔记
+	{
+		write_display();
+	}
+	if (flag == 2 && classflag == 0) //查看笔记
+	{
+		class_display(); //直接列出6类
+	}
+	if (flag == 3)
+	{
+		int size = GetPointSize();
+		if (ifpress)
+		{
+			DefineColor("mycolor", 0.62, 0.85, 0.78);
+			SetPenColor("mycolor");
+			drawRectangle(0.09 * winwidth, 0.02 * winheight, 0.82 * winwidth, 0.19 * winheight, 1);
+			SetPenColor("Black");
+			SetPointSize(20);
+			drawLabel(0.15 * winwidth, 0.18 * winheight, "1.请在第一次使用前修改笔记数据的打开路径!具体修改位置需要进入File.c中;");
+			drawLabel(0.15 * winwidth, 0.15 * winheight, "2.请不要在保存的进程中退出;");
+			drawLabel(0.15 * winwidth, 0.12 * winheight, "3.保存文件时,请在文件命名添加后缀.txt;");
+			drawLabel(0.15 * winwidth, 0.09 * winheight, "4.请不要关闭笔记分类时打开的控制台;");
+			drawLabel(0.15 * winwidth, 0.06 * winheight, "5.笔记窗口可能会把控制台(黑框)挡住哦;");
+			drawLabel(0.15 * winwidth, 0.03 * winheight, "6.该系统暂时支持6类,每类最多9个笔记;");
+
+		}
+		SetPointSize(size);
+		DrawNotebooks();
+		DrawHeadArea();
+	}
+	
+	if (show == 1) {
+		InitConsole();
+		system("mode con cols=80 lines=40  ");
+		//SetConsoleTitle("再次提醒!");
+		printf("这个控制台只负责传递信息,不用输入任何内容,也不用关闭.\n\n\
+在第一次使用之前务必创建存储笔记信息的文本文档\n\
+并且根据该文档的路径修改File.c里面的两处路径字符串!\n\n\
+请一定在保存文件的时候,在文件正式名称后面加上\".txt\",比如\"我的笔记.txt\".\n\n\
+同理之后在查找和删除的时候也需要输入完整的名称.\n\n\
+后续在调用控制台的过程中,本图形窗口可能会遮挡控制台.\n请以移动图形窗口或者在状态栏寻找控制台\n\n\
+如果关闭本程序再次打开时,发现无法打开已经存在的笔记,任意新建笔记之后即可打开.\n\n\
+当鼠标在按钮上移动的时候,会在控制台出现大量信息,请忽略.\n\n\
+最后,请$不要$在使用过程中关闭控制台.\n\n祝您使用愉快!\n\n\n\n\n\n");
+		show = 0;
+	}
+	
+}
+
+
+/*画出笔记本和说明*/
+void DrawNotebooks()
+{
+	double w = 2.0;
+	double h = 2.6;
+	if (button(GenUIID(0), 0.20 * winwidth, 0.33 * winheight, w, h, "新建笔记")) {
+		flag = 1;
+		DisplayClear();
+	}
+	if (button(GenUIID(0), 0.60 * winwidth, 0.33 * winheight, w, h, "查看笔记")) {
+		flag = 2;
+		DisplayClear();
+	}
+	if (button(GenUIID(0), 0.33 * winwidth, 0.2 * winheight, 0.33 * winwidth, 0.08 * winheight, ifpress ? "关闭说明" : "使用说明"))
+	{
+		ifpress = !ifpress;
+		flag = 3;
+	}
+}
